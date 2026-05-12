@@ -42,6 +42,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--load-in-4bit", action="store_true")
+    parser.add_argument(
+        "--device-map",
+        choices=["single", "auto"],
+        default="single",
+        help="Use 'single' for Trainer fine-tuning. 'auto' may shard across GPUs and fail with Trainer.",
+    )
     parser.add_argument("--logging-steps", type=int, default=10)
     parser.add_argument("--save-steps", type=int, default=100)
     return parser.parse_args()
@@ -86,7 +92,7 @@ def main() -> None:
 
     model_kwargs = {
         "trust_remote_code": True,
-        "device_map": "auto",
+        "device_map": {"": 0} if args.device_map == "single" and torch.cuda.is_available() else args.device_map,
         "torch_dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     }
     if args.load_in_4bit:
