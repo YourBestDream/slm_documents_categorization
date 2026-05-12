@@ -100,6 +100,12 @@ This writes up to 25 OCR-valid examples for each of the 16 labels in each split.
 prints the label distribution after writing every split. If the test set contains only one
 label, the evaluation metrics are not meaningful.
 
+Progress is printed every 25 written records by default. Change it with:
+
+```bash
+python scripts/prepare_data.py --samples-per-label 150 --progress-every 10
+```
+
 With Docker and Make:
 
 ```bash

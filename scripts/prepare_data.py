@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from collections import Counter
 from io import BytesIO
 from pathlib import Path
@@ -66,6 +67,12 @@ def parse_args() -> argparse.Namespace:
         default=10000,
         help="Streaming shuffle buffer. Use 0 to disable shuffling.",
     )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=25,
+        help="Print progress after this many written records. Use 0 to disable.",
+    )
     parser.add_argument("--min-text-chars", type=int, default=20)
     return parser.parse_args()
 
@@ -117,6 +124,37 @@ def maybe_shuffle_dataset(dataset_split, args: argparse.Namespace, output_split:
     )
 
 
+def target_records(args: argparse.Namespace) -> int | None:
+    if args.samples_per_label > 0:
+        return args.samples_per_label * len(DEFAULT_LABEL_SPACE.labels)
+    if args.max_samples_per_split > 0:
+        return args.max_samples_per_split
+    return None
+
+
+def print_progress(
+    output_split: str,
+    written: int,
+    seen: int,
+    target: int | None,
+    started_at: float,
+    label_counts: Counter[str],
+) -> None:
+    elapsed = time.monotonic() - started_at
+    rate = written / elapsed if elapsed > 0 else 0.0
+    percent = f"{(written / target) * 100:5.1f}%" if target else "  n/a"
+    target_text = str(target) if target else "unknown"
+    labels_text = ", ".join(
+        f"{label}={count}" for label, count in sorted(label_counts.items()) if count
+    )
+    print(
+        f"[{output_split}] {written}/{target_text} written ({percent}); "
+        f"{seen} rows scanned; {rate:.2f} records/s; elapsed {elapsed / 60:.1f} min; "
+        f"labels: {labels_text}",
+        flush=True,
+    )
+
+
 def iter_records(args: argparse.Namespace, output_split: str):
     source_split = dataset_split_name(output_split)
     dataset_split = load_dataset(
@@ -131,6 +169,8 @@ def iter_records(args: argparse.Namespace, output_split: str):
 
     label_counts: Counter[str] = Counter()
     total_written = 0
+    started_at = time.monotonic()
+    target = target_records(args)
     for index, example in enumerate(dataset_split):
         label = label_to_name(dataset_split, args.label_column, example[args.label_column])
         if args.samples_per_label > 0 and label_counts[label] >= args.samples_per_label:
@@ -151,6 +191,15 @@ def iter_records(args: argparse.Namespace, output_split: str):
 
         label_counts[label] += 1
         total_written += 1
+        if args.progress_every > 0 and total_written % args.progress_every == 0:
+            print_progress(
+                output_split,
+                written=total_written,
+                seen=index + 1,
+                target=target,
+                started_at=started_at,
+                label_counts=label_counts,
+            )
         yield {
             "id": f"{output_split}-{index}",
             "source_dataset": args.dataset_name,
@@ -158,6 +207,15 @@ def iter_records(args: argparse.Namespace, output_split: str):
             "text": text,
             "label": label,
         }
+
+    print_progress(
+        output_split,
+        written=total_written,
+        seen=index + 1 if "index" in locals() else 0,
+        target=target,
+        started_at=started_at,
+        label_counts=label_counts,
+    )
 
 
 def main() -> None:
