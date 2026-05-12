@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import sys
 from pathlib import Path
 
@@ -55,6 +56,13 @@ def tokenize_example(example, tokenizer, max_length: int, max_input_chars: int):
     labels = ([-100] * len(prompt_ids) + answer_ids)[:max_length]
     attention_mask = [1] * len(input_ids)
     return {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask}
+
+
+def trainer_tokenizer_kwargs(tokenizer) -> dict:
+    trainer_parameters = inspect.signature(Trainer.__init__).parameters
+    if "processing_class" in trainer_parameters:
+        return {"processing_class": tokenizer}
+    return {"tokenizer": tokenizer}
 
 
 def main() -> None:
@@ -134,8 +142,8 @@ def main() -> None:
         args=training_args,
         train_dataset=tokenized["train"],
         eval_dataset=tokenized.get("validation"),
-        tokenizer=tokenizer,
         data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer, padding=True),
+        **trainer_tokenizer_kwargs(tokenizer),
     )
     trainer.train()
 
