@@ -15,6 +15,13 @@ from doc_classifier.io import write_jsonl
 from doc_classifier.labels import DEFAULT_LABEL_SPACE, RVL_CDIP_LABELS
 
 
+DEFAULT_SPLIT_MAP: dict[str, str] = {
+    "train": "train",
+    "validation": "val",
+    "test": "test",
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Prepare OCR text JSONL files from an open-source document dataset."
@@ -71,10 +78,15 @@ def ocr_image(image) -> str:
         ) from exc
 
 
-def iter_records(args: argparse.Namespace, split: str):
+def dataset_split_name(output_split: str) -> str:
+    return DEFAULT_SPLIT_MAP.get(output_split, output_split)
+
+
+def iter_records(args: argparse.Namespace, output_split: str):
+    source_split = dataset_split_name(output_split)
     dataset_split = load_dataset(
         args.dataset_name,
-        split=split,
+        split=source_split,
         streaming=not args.no_streaming,
     )
     if args.max_samples_per_split > 0 and args.no_streaming:
@@ -87,9 +99,9 @@ def iter_records(args: argparse.Namespace, split: str):
         if len(text) < args.min_text_chars:
             continue
         yield {
-            "id": f"{split}-{index}",
+            "id": f"{output_split}-{index}",
             "source_dataset": args.dataset_name,
-            "split": split,
+            "split": output_split,
             "text": text,
             "label": label_to_name(dataset_split, args.label_column, example[args.label_column]),
         }
@@ -99,9 +111,9 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    for split in args.splits:
-        output_path = args.output_dir / f"{split}.jsonl"
-        count = write_jsonl(output_path, iter_records(args, split))
+    for output_split in args.splits:
+        output_path = args.output_dir / f"{output_split}.jsonl"
+        count = write_jsonl(output_path, iter_records(args, output_split))
         print(f"Wrote {count} records to {output_path}")
 
 
