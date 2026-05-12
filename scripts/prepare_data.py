@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from doc_classifier.io import write_jsonl
+from doc_classifier.io import read_jsonl, write_jsonl
 from doc_classifier.labels import DEFAULT_LABEL_SPACE, RVL_CDIP_LABELS
 
 
@@ -19,6 +20,12 @@ DEFAULT_SPLIT_MAP: dict[str, str] = {
     "train": "train",
     "validation": "val",
     "test": "test",
+}
+
+SPLIT_SEED_OFFSET: dict[str, int] = {
+    "train": 0,
+    "validation": 1,
+    "test": 2,
 }
 
 
@@ -44,7 +51,20 @@ def parse_args() -> argparse.Namespace:
         "--max-samples-per-split",
         type=int,
         default=250,
-        help="Use 0 to process the full split. The default is intentionally small.",
+        help="Use 0 to process the full split. Ignored when --samples-per-label is set.",
+    )
+    parser.add_argument(
+        "--samples-per-label",
+        type=int,
+        default=0,
+        help="Write up to this many OCR-valid examples per label for each split.",
+    )
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--shuffle-buffer-size",
+        type=int,
+        default=10000,
+        help="Streaming shuffle buffer. Use 0 to disable shuffling.",
     )
     parser.add_argument("--min-text-chars", type=int, default=20)
     return parser.parse_args()
@@ -82,6 +102,21 @@ def dataset_split_name(output_split: str) -> str:
     return DEFAULT_SPLIT_MAP.get(output_split, output_split)
 
 
+def split_seed(args: argparse.Namespace, output_split: str) -> int:
+    return args.seed + SPLIT_SEED_OFFSET.get(output_split, 0)
+
+
+def maybe_shuffle_dataset(dataset_split, args: argparse.Namespace, output_split: str):
+    if args.shuffle_buffer_size <= 0:
+        return dataset_split
+    if args.no_streaming:
+        return dataset_split.shuffle(seed=split_seed(args, output_split))
+    return dataset_split.shuffle(
+        seed=split_seed(args, output_split),
+        buffer_size=args.shuffle_buffer_size,
+    )
+
+
 def iter_records(args: argparse.Namespace, output_split: str):
     source_split = dataset_split_name(output_split)
     dataset_split = load_dataset(
@@ -89,21 +124,39 @@ def iter_records(args: argparse.Namespace, output_split: str):
         split=source_split,
         streaming=not args.no_streaming,
     )
-    if args.max_samples_per_split > 0 and args.no_streaming:
+    dataset_split = maybe_shuffle_dataset(dataset_split, args, output_split)
+
+    if args.samples_per_label <= 0 and args.max_samples_per_split > 0 and args.no_streaming:
         dataset_split = dataset_split.select(range(min(args.max_samples_per_split, len(dataset_split))))
 
+    label_counts: Counter[str] = Counter()
+    total_written = 0
     for index, example in enumerate(dataset_split):
-        if args.max_samples_per_split > 0 and index >= args.max_samples_per_split:
+        label = label_to_name(dataset_split, args.label_column, example[args.label_column])
+        if args.samples_per_label > 0 and label_counts[label] >= args.samples_per_label:
+            if all(label_counts[item] >= args.samples_per_label for item in DEFAULT_LABEL_SPACE.labels):
+                break
+            continue
+
+        if (
+            args.samples_per_label <= 0
+            and args.max_samples_per_split > 0
+            and total_written >= args.max_samples_per_split
+        ):
             break
+
         text = ocr_image(example[args.image_column])
         if len(text) < args.min_text_chars:
             continue
+
+        label_counts[label] += 1
+        total_written += 1
         yield {
             "id": f"{output_split}-{index}",
             "source_dataset": args.dataset_name,
             "split": output_split,
             "text": text,
-            "label": label_to_name(dataset_split, args.label_column, example[args.label_column]),
+            "label": label,
         }
 
 
@@ -115,6 +168,8 @@ def main() -> None:
         output_path = args.output_dir / f"{output_split}.jsonl"
         count = write_jsonl(output_path, iter_records(args, output_split))
         print(f"Wrote {count} records to {output_path}")
+        distribution = Counter(record["label"] for record in read_jsonl(output_path))
+        print(f"Label distribution: {dict(sorted(distribution.items()))}")
 
 
 if __name__ == "__main__":

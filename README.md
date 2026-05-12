@@ -90,6 +90,16 @@ legacy Hugging Face dataset scripts that recent `datasets` versions no longer lo
 Preparation uses streaming by default, so sample runs do not need to download the full
 dataset first.
 
+For training and evaluation, prefer balanced samples:
+
+```bash
+python scripts/prepare_data.py --samples-per-label 25
+```
+
+This writes up to 25 OCR-valid examples for each of the 16 labels in each split. The script
+prints the label distribution after writing every split. If the test set contains only one
+label, the evaluation metrics are not meaningful.
+
 With Docker and Make:
 
 ```bash
@@ -100,6 +110,12 @@ Without Make:
 
 ```bash
 docker compose run --rm app python scripts/prepare_data.py --max-samples-per-split 25
+```
+
+Balanced Docker sample:
+
+```bash
+docker compose run --rm app python scripts/prepare_data.py --samples-per-label 25
 ```
 
 To process the full RVL-CDIP splits, use:
