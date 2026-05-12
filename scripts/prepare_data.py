@@ -8,8 +8,10 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from datasets import Image as DatasetImage
 from datasets import load_dataset
-from PIL import Image
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -95,14 +97,17 @@ def ocr_image(image) -> str:
     try:
         if isinstance(image, dict):
             if image.get("bytes") is not None:
-                image = Image.open(BytesIO(image["bytes"]))
+                image = PILImage.open(BytesIO(image["bytes"]))
             elif image.get("path") is not None:
-                image = Image.open(image["path"])
+                image = PILImage.open(image["path"])
         return pytesseract.image_to_string(image).strip()
     except pytesseract.TesseractNotFoundError as exc:
         raise RuntimeError(
             "Tesseract OCR executable was not found. Install Tesseract and ensure it is on PATH."
         ) from exc
+    except (UnidentifiedImageError, OSError) as exc:
+        print(f"Skipping unreadable image: {exc}", flush=True)
+        return ""
 
 
 def dataset_split_name(output_split: str) -> str:
@@ -162,6 +167,7 @@ def iter_records(args: argparse.Namespace, output_split: str):
         split=source_split,
         streaming=not args.no_streaming,
     )
+    dataset_split = dataset_split.cast_column(args.image_column, DatasetImage(decode=False))
     dataset_split = maybe_shuffle_dataset(dataset_split, args, output_split)
 
     if args.samples_per_label <= 0 and args.max_samples_per_split > 0 and args.no_streaming:
