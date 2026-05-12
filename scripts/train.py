@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import os
 import sys
 from pathlib import Path
+
+# Keep Trainer from wrapping the model in DataParallel on multi-GPU notebook hosts.
+# Set CUDA_VISIBLE_DEVICES yourself before launching if you intentionally want another device.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 import torch
 from datasets import load_dataset
