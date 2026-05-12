@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 from datasets import load_dataset
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -17,11 +19,20 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Prepare OCR text JSONL files from an open-source document dataset."
     )
-    parser.add_argument("--dataset-name", default="aharley/rvl_cdip")
+    parser.add_argument(
+        "--dataset-name",
+        default="chainyo/rvl-cdip",
+        help="Parquet-backed RVL-CDIP mirror. Avoids legacy HF dataset scripts.",
+    )
     parser.add_argument("--image-column", default="image")
     parser.add_argument("--label-column", default="label")
     parser.add_argument("--output-dir", type=Path, default=Path("data/processed"))
     parser.add_argument("--splits", nargs="+", default=["train", "validation", "test"])
+    parser.add_argument(
+        "--no-streaming",
+        action="store_true",
+        help="Disable streaming and download/cache dataset shards locally.",
+    )
     parser.add_argument(
         "--max-samples-per-split",
         type=int,
@@ -48,6 +59,11 @@ def ocr_image(image) -> str:
         raise RuntimeError("Install pytesseract to OCR document images.") from exc
 
     try:
+        if isinstance(image, dict):
+            if image.get("bytes") is not None:
+                image = Image.open(BytesIO(image["bytes"]))
+            elif image.get("path") is not None:
+                image = Image.open(image["path"])
         return pytesseract.image_to_string(image).strip()
     except pytesseract.TesseractNotFoundError as exc:
         raise RuntimeError(
@@ -56,11 +72,17 @@ def ocr_image(image) -> str:
 
 
 def iter_records(args: argparse.Namespace, split: str):
-    dataset_split = load_dataset(args.dataset_name, split=split)
-    if args.max_samples_per_split > 0:
+    dataset_split = load_dataset(
+        args.dataset_name,
+        split=split,
+        streaming=not args.no_streaming,
+    )
+    if args.max_samples_per_split > 0 and args.no_streaming:
         dataset_split = dataset_split.select(range(min(args.max_samples_per_split, len(dataset_split))))
 
     for index, example in enumerate(dataset_split):
+        if args.max_samples_per_split > 0 and index >= args.max_samples_per_split:
+            break
         text = ocr_image(example[args.image_column])
         if len(text) < args.min_text_chars:
             continue
@@ -85,4 +107,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

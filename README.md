@@ -1,9 +1,9 @@
 # SLM Documents Categorization
 
 This project fine-tunes **Qwen3 1.7B** with LoRA for document category classification.
-The default dataset pipeline uses the open-source **RVL-CDIP** document classification
-dataset, extracts OCR text from each document image, and trains the model to return one
-category for each document.
+The default dataset pipeline uses a Parquet-backed mirror of the open-source **RVL-CDIP**
+document classification dataset, extracts OCR text from each document image, and trains
+the model to return one category for each document.
 
 ## Labels
 
@@ -85,6 +85,11 @@ can be tested quickly:
 python scripts/prepare_data.py
 ```
 
+The default dataset is `chainyo/rvl-cdip`, a Parquet-backed RVL-CDIP mirror. This avoids
+legacy Hugging Face dataset scripts that recent `datasets` versions no longer load.
+Preparation uses streaming by default, so sample runs do not need to download the full
+dataset first.
+
 With Docker and Make:
 
 ```bash
@@ -118,7 +123,7 @@ Prepared files are written to:
 Each JSONL row has this shape:
 
 ```json
-{"id": "train-0", "source_dataset": "aharley/rvl_cdip", "split": "train", "text": "...", "label": "invoice"}
+{"id": "train-0", "source_dataset": "chainyo/rvl-cdip", "split": "train", "text": "...", "label": "invoice"}
 ```
 
 ## Fine-Tune
@@ -263,6 +268,24 @@ make evaluate-smoke MAX_SAMPLES=5
 
 Meaningful metrics require a real training run on enough data. CPU-only training is mainly
 for verifying the workflow, not for producing final results.
+
+## Colab Notes
+
+If you see this error in Colab:
+
+```text
+RuntimeError: Dataset scripts are no longer supported, but found rvl_cdip.py
+```
+
+pull the latest branch and run preparation without overriding `--dataset-name`:
+
+```bash
+git pull
+python scripts/prepare_data.py --max-samples-per-split 500
+```
+
+The project now defaults to `chainyo/rvl-cdip`, which is loaded as Parquet instead of
+through the old `rvl_cdip.py` script.
 
 ## Repository Structure
 
