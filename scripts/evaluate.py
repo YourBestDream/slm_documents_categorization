@@ -47,8 +47,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         choices=["constrained", "hybrid", "score", "generate"],
-        default="constrained",
-        help="constrained only allows label tokens during generation.",
+        default="generate",
+        help="generate uses normal fine-tuned generation and parses only known labels.",
     )
     return parser.parse_args()
 

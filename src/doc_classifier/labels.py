@@ -24,6 +24,8 @@ RVL_CDIP_LABELS: tuple[str, ...] = (
     "memo",
 )
 
+UNKNOWN_LABEL = "unknown"
+
 
 LABEL_ALIASES: dict[str, str] = {
     "report": "scientific report",
@@ -51,21 +53,7 @@ class LabelSpace:
         return ", ".join(self.labels)
 
     def closest_from_text(self, value: str) -> str:
-        text = value.strip().lower()
-        if not text:
-            return "unknown"
-
-        for label in self.labels:
-            if label == text or label in text:
-                return label
-
-        for alias, label in LABEL_ALIASES.items():
-            if alias in text:
-                return label
-
-        first_line = text.splitlines()[0]
-        first_line = first_line.strip(" .,:;`'\"")
-        return LABEL_ALIASES.get(first_line, first_line)
+        return self.label_from_generated_text(value) or UNKNOWN_LABEL
 
     def label_from_generated_text(self, value: str) -> str | None:
         text = value.strip().lower()

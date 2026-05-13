@@ -213,9 +213,9 @@ Evaluation writes:
 - `outputs/predictions.json`
 - `outputs/confusion_matrix.png`
 
-Evaluation uses constrained label generation by default. The model still generates, but
-the decoder is only allowed to emit one of the configured labels. Use `--mode generate`
-only when comparing with raw free-text generation behavior.
+Evaluation uses normal fine-tuned generation by default and only accepts configured labels
+from the generated answer. If no configured label is found, the prediction is recorded as
+`unknown`.
 
 For a quick smoke evaluation:
 
@@ -244,8 +244,10 @@ Classify raw text:
 python scripts/predict.py --text "Invoice number 1024. Total due 594.00. Payment terms net 30."
 ```
 
-Prediction uses constrained label generation by default, so `category` is always one of
-the configured labels. To inspect the raw constrained answer:
+Prediction uses normal fine-tuned generation by default and parses only configured labels
+from the generated answer. If no configured label is found, `category` is `unknown`. To
+compare alternate decoding strategies, use `--mode constrained`, `--mode hybrid`, or
+`--mode score`.
 
 ```bash
 python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --show-scores
