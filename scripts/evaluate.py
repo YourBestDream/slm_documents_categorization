@@ -1,3 +1,5 @@
+"""Evaluate a trained document classifier adapter on a JSONL test split."""
+
 from __future__ import annotations
 
 import argparse
@@ -25,6 +27,7 @@ from doc_classifier.modeling import (
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse evaluation, model-loading, decoding-mode, and output arguments."""
     parser = argparse.ArgumentParser(description="Evaluate the document classifier.")
     parser.add_argument("--model-name", default="Qwen/Qwen3-1.7B")
     parser.add_argument("--adapter-path", type=Path, default=Path("models/qwen3-doc-classifier"))
@@ -54,6 +57,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def count_records(path: Path, max_samples: int = 0) -> int:
+    """Count JSONL records, respecting an optional sample cap."""
     count = 0
     with path.open("r", encoding="utf-8") as file:
         for count, _ in enumerate(file, start=1):
@@ -63,6 +67,7 @@ def count_records(path: Path, max_samples: int = 0) -> int:
 
 
 def print_progress(completed: int, total: int, started_at: float) -> None:
+    """Print evaluation progress with throughput and estimated remaining time."""
     elapsed = time.monotonic() - started_at
     rate = completed / elapsed if elapsed > 0 else 0.0
     remaining = (total - completed) / rate if rate > 0 else 0.0
@@ -76,6 +81,7 @@ def print_progress(completed: int, total: int, started_at: float) -> None:
 
 
 def save_confusion_matrix(y_true: list[str], y_pred: list[str], output_path: Path) -> None:
+    """Render and save a confusion matrix for all configured labels."""
     labels = list(DEFAULT_LABEL_SPACE.labels)
     matrix = confusion_matrix(y_true, y_pred, labels=labels)
     fig, ax = plt.subplots(figsize=(12, 10))
@@ -93,6 +99,7 @@ def save_confusion_matrix(y_true: list[str], y_pred: list[str], output_path: Pat
 
 
 def main() -> None:
+    """Run inference over the test set, write metrics, predictions, and confusion matrix."""
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -6,6 +6,7 @@ from .labels import DEFAULT_LABEL_SPACE, LabelSpace
 
 
 def truncate_text(text: str, max_chars: int) -> str:
+    """Normalize line endings and truncate text to fit the prompt budget."""
     cleaned = "\n".join(line.rstrip() for line in text.strip().splitlines())
     if len(cleaned) <= max_chars:
         return cleaned
@@ -13,6 +14,7 @@ def truncate_text(text: str, max_chars: int) -> str:
 
 
 def build_prompt(text: str, label_space: LabelSpace = DEFAULT_LABEL_SPACE, max_chars: int = 6000) -> str:
+    """Build the instruction prompt used for training and inference."""
     document_text = truncate_text(text, max_chars=max_chars)
     return (
         "You are a document classifier.\n"
@@ -29,5 +31,6 @@ def build_prompt(text: str, label_space: LabelSpace = DEFAULT_LABEL_SPACE, max_c
 
 
 def build_training_text(text: str, label: str, max_chars: int = 6000) -> str:
+    """Build a prompt plus expected label completion for supervised fine-tuning."""
     normalized_label = DEFAULT_LABEL_SPACE.normalize(label)
     return f"{build_prompt(text, max_chars=max_chars)} {normalized_label}"

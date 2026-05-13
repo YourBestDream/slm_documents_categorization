@@ -250,13 +250,13 @@ compare alternate decoding strategies, use `--mode constrained`, `--mode hybrid`
 `--mode score`.
 
 ```bash
-python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --show-scores
+python scripts/predict.py --text "Invoice number 1024. Total due 594.00."
 ```
 
-The legacy free-text generation mode is still available for debugging:
+To inspect score-mode label rankings:
 
 ```bash
-python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --mode generate
+python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --mode score --show-scores
 ```
 
 With Docker and Make:
@@ -338,6 +338,55 @@ Evaluation artifacts from the run:
 - `outputs/metrics.json`
 - `outputs/predictions.json`
 - `outputs/confusion_matrix.png`
+
+## Reproduce Final Run
+
+The final run was executed on Kaggle using the prepared JSONL dataset and a saved LoRA
+adapter. The Kaggle input dataset contained:
+
+- `train.jsonl`
+- `validation.jsonl`
+- `test.jsonl`
+
+The restored adapter directory contained:
+
+- `adapter_model.safetensors`
+- `adapter_config.json`
+- `base_model_name.txt`
+- tokenizer files
+
+Example Kaggle evaluation command:
+
+```bash
+python scripts/evaluate.py \
+  --load-in-4bit \
+  --adapter-path /kaggle/input/datasets/scarletliar/results-of-training/kaggle/working/models/qwen3-doc-classifier \
+  --test-file /kaggle/input/datasets/scarletliar/qwen3-doc-classifier/test.jsonl \
+  --output-dir /kaggle/working/outputs-generation \
+  --mode generate \
+  --progress-every 25
+```
+
+Example Kaggle prediction command:
+
+```bash
+python scripts/predict.py \
+  --file /kaggle/working/sample.png \
+  --adapter-path /kaggle/input/datasets/scarletliar/results-of-training/kaggle/working/models/qwen3-doc-classifier \
+  --load-in-4bit \
+  --show-extracted-text
+```
+
+## Limitations
+
+- The model is trained on OCR text, not document images directly, so OCR quality strongly
+  affects predictions.
+- RVL-CDIP labels do not include every business category. For example, `banking` is mapped
+  to `budget` as a fallback.
+- The reported metrics use a balanced sampled test set of 640 documents, not the full
+  RVL-CDIP test split.
+- Internet documents can be out of distribution. If the generated answer does not contain
+  a configured label, prediction returns `unknown`.
 
 ## CPU-Only Startup Path
 

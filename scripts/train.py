@@ -1,3 +1,5 @@
+"""Fine-tune Qwen3 1.7B for document classification with LoRA or QLoRA."""
+
 from __future__ import annotations
 
 import argparse
@@ -28,6 +30,7 @@ from doc_classifier.prompts import build_prompt
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse training, LoRA, quantization, and dataset arguments."""
     parser = argparse.ArgumentParser(description="Fine-tune Qwen3 1.7B for document classification.")
     parser.add_argument("--model-name", default="Qwen/Qwen3-1.7B")
     parser.add_argument("--train-file", type=Path, default=Path("data/processed/train.jsonl"))
@@ -59,6 +62,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def tokenize_example(example, tokenizer, max_length: int, max_input_chars: int):
+    """Format one JSONL record as a supervised causal-LM training example."""
     label = DEFAULT_LABEL_SPACE.normalize(example["label"])
     prompt = build_prompt(example["text"], max_chars=max_input_chars)
     prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
@@ -70,6 +74,7 @@ def tokenize_example(example, tokenizer, max_length: int, max_input_chars: int):
 
 
 def trainer_tokenizer_kwargs(tokenizer) -> dict:
+    """Return the tokenizer argument name supported by the installed Transformers version."""
     trainer_parameters = inspect.signature(Trainer.__init__).parameters
     if "processing_class" in trainer_parameters:
         return {"processing_class": tokenizer}
@@ -77,6 +82,7 @@ def trainer_tokenizer_kwargs(tokenizer) -> dict:
 
 
 def main() -> None:
+    """Load data/model, attach LoRA adapters, train, and save the adapter artifacts."""
     args = parse_args()
     data_files = {"train": str(args.train_file)}
     if args.validation_file.exists():

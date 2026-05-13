@@ -12,6 +12,7 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 
 
 def extract_text(path: Path) -> str:
+    """Extract text from a supported text, PDF, or image file."""
     suffix = path.suffix.lower()
     if suffix in TEXT_SUFFIXES:
         return path.read_text(encoding="utf-8", errors="ignore")
@@ -25,6 +26,7 @@ def extract_text(path: Path) -> str:
 
 
 def extract_pdf_text(path: Path) -> str:
+    """Extract embedded text from a PDF using pypdf."""
     try:
         from pypdf import PdfReader
     except ImportError as exc:
@@ -41,6 +43,7 @@ def extract_pdf_text(path: Path) -> str:
 
 
 def extract_image_text(path: Path) -> str:
+    """Extract text from an image using Tesseract OCR."""
     try:
         import pytesseract
     except ImportError as exc:
@@ -53,4 +56,3 @@ def extract_image_text(path: Path) -> str:
         raise RuntimeError(
             "Tesseract OCR executable was not found. Install Tesseract and ensure it is on PATH."
         ) from exc
-

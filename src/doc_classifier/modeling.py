@@ -13,6 +13,7 @@ from .prompts import build_prompt
 
 
 def load_tokenizer(model_name_or_path: str):
+    """Load a tokenizer and ensure it has a pad token for batching."""
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -24,6 +25,7 @@ def load_causal_lm(
     adapter_path: str | None = None,
     load_in_4bit: bool = False,
 ):
+    """Load the base causal LM and optionally attach a saved PEFT adapter."""
     quantization_config = None
     if load_in_4bit:
         from transformers import BitsAndBytesConfig
@@ -60,6 +62,7 @@ def classify_text_constrained(
     max_input_chars: int = 6000,
     max_new_tokens: int = 8,
 ) -> tuple[str, str]:
+    """Generate a label while restricting decoding to the configured label strings."""
     prompt = build_prompt(text, max_chars=max_input_chars)
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(model.device)
     prompt_length = inputs["input_ids"].shape[-1]
@@ -103,6 +106,7 @@ def score_labels(
     max_input_chars: int = 6000,
     label_batch_size: int = 4,
 ) -> dict[str, float]:
+    """Score each allowed label by average label-token negative log likelihood."""
     prompt = build_prompt(text, max_chars=max_input_chars)
     prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
     device = next(model.parameters()).device
@@ -177,6 +181,7 @@ def classify_text_by_score(
     max_input_chars: int = 6000,
     label_batch_size: int = 4,
 ) -> tuple[str, dict[str, float]]:
+    """Classify text by selecting the label with the lowest language-model loss."""
     scores = score_labels(
         text,
         model,
@@ -196,6 +201,7 @@ def classify_text(
     max_input_chars: int = 6000,
     max_new_tokens: int = 16,
 ) -> tuple[str, str]:
+    """Classify text with normal generation and parse only configured labels."""
     prompt = build_prompt(text, max_chars=max_input_chars)
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(model.device)
     output_ids = model.generate(
@@ -221,6 +227,7 @@ def classify_text_hybrid(
     max_new_tokens: int = 16,
     label_batch_size: int = 1,
 ) -> tuple[str, str, dict[str, float] | None]:
+    """Generate first, then fall back to label scoring if no valid label is generated."""
     label, raw_answer = classify_text(
         text,
         model,
@@ -249,6 +256,7 @@ def classify_text_strict(
     max_input_chars: int = 6000,
     label_batch_size: int = 4,
 ) -> tuple[str, dict[str, float]]:
+    """Classify text with score-only decoding and reject non-finite scores."""
     label, scores = classify_text_by_score(
         text,
         model,
@@ -262,6 +270,7 @@ def classify_text_strict(
 
 
 def resolve_base_model(adapter_path: Path, fallback: str) -> str:
+    """Read the base model name saved with an adapter, or return the fallback."""
     config_path = adapter_path / "base_model_name.txt"
     if config_path.exists():
         return config_path.read_text(encoding="utf-8").strip()

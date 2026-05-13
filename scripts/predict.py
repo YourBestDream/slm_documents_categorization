@@ -1,3 +1,5 @@
+"""Classify one document or raw text using the fine-tuned Qwen adapter."""
+
 from __future__ import annotations
 
 import argparse
@@ -20,6 +22,7 @@ from doc_classifier.modeling import (
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse single-document prediction and model-loading arguments."""
     parser = argparse.ArgumentParser(description="Classify one document file.")
     parser.add_argument("--file", type=Path, help="Path to a text, PDF, or image document.")
     parser.add_argument("--text", help="Raw document text. Useful for quick tests.")
@@ -48,6 +51,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Extract document text when needed, load the model, and print the predicted category."""
     args = parse_args()
     if not args.file and not args.text:
         raise SystemExit("Provide --file or --text.")

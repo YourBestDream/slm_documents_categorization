@@ -1,3 +1,9 @@
+"""Prepare OCR-based document classification datasets.
+
+This script streams RVL-CDIP-style document images from Hugging Face, runs OCR, normalizes
+labels, and writes train/validation/test JSONL files consumed by the fine-tuning script.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -33,6 +39,7 @@ SPLIT_SEED_OFFSET: dict[str, int] = {
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line options for dataset loading, balancing, OCR, and output paths."""
     parser = argparse.ArgumentParser(
         description="Prepare OCR text JSONL files from an open-source document dataset."
     )
@@ -80,6 +87,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def label_to_name(dataset_split, label_column: str, value: Any) -> str:
+    """Convert a dataset label value into the normalized project label name."""
     feature = dataset_split.features.get(label_column)
     if hasattr(feature, "int2str"):
         return DEFAULT_LABEL_SPACE.normalize(feature.int2str(value))
@@ -89,6 +97,7 @@ def label_to_name(dataset_split, label_column: str, value: Any) -> str:
 
 
 def ocr_image(image) -> str:
+    """Run Tesseract OCR on a PIL image or streamed Hugging Face image dictionary."""
     try:
         import pytesseract
     except ImportError as exc:
@@ -111,14 +120,17 @@ def ocr_image(image) -> str:
 
 
 def dataset_split_name(output_split: str) -> str:
+    """Map project split names to the split names used by the selected dataset."""
     return DEFAULT_SPLIT_MAP.get(output_split, output_split)
 
 
 def split_seed(args: argparse.Namespace, output_split: str) -> int:
+    """Return a deterministic shuffle seed for each output split."""
     return args.seed + SPLIT_SEED_OFFSET.get(output_split, 0)
 
 
 def maybe_shuffle_dataset(dataset_split, args: argparse.Namespace, output_split: str):
+    """Shuffle a regular or streaming dataset when shuffling is enabled."""
     if args.shuffle_buffer_size <= 0:
         return dataset_split
     if args.no_streaming:
@@ -130,6 +142,7 @@ def maybe_shuffle_dataset(dataset_split, args: argparse.Namespace, output_split:
 
 
 def target_records(args: argparse.Namespace) -> int | None:
+    """Return the expected number of records for progress reporting, if bounded."""
     if args.samples_per_label > 0:
         return args.samples_per_label * len(DEFAULT_LABEL_SPACE.labels)
     if args.max_samples_per_split > 0:
@@ -145,6 +158,7 @@ def print_progress(
     started_at: float,
     label_counts: Counter[str],
 ) -> None:
+    """Print OCR/data preparation progress for a split."""
     elapsed = time.monotonic() - started_at
     rate = written / elapsed if elapsed > 0 else 0.0
     percent = f"{(written / target) * 100:5.1f}%" if target else "  n/a"
@@ -161,6 +175,7 @@ def print_progress(
 
 
 def iter_records(args: argparse.Namespace, output_split: str):
+    """Yield OCR-valid JSONL records for one output split."""
     source_split = dataset_split_name(output_split)
     dataset_split = load_dataset(
         args.dataset_name,
@@ -225,6 +240,7 @@ def iter_records(args: argparse.Namespace, output_split: str):
 
 
 def main() -> None:
+    """Prepare each requested split and print the resulting label distribution."""
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 

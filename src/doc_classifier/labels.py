@@ -38,9 +38,12 @@ LABEL_ALIASES: dict[str, str] = {
 
 @dataclass(frozen=True)
 class LabelSpace:
+    """Known document labels and helpers for normalization/parsing."""
+
     labels: tuple[str, ...] = RVL_CDIP_LABELS
 
     def normalize(self, value: str) -> str:
+        """Normalize user/dataset label text and validate that it is supported."""
         normalized = " ".join(value.strip().lower().replace("_", " ").split())
         normalized = LABEL_ALIASES.get(normalized, normalized)
         if normalized not in self.labels:
@@ -50,12 +53,15 @@ class LabelSpace:
         return normalized
 
     def choices_text(self) -> str:
+        """Return labels as a comma-separated string for prompts."""
         return ", ".join(self.labels)
 
     def closest_from_text(self, value: str) -> str:
+        """Parse a generated label, returning ``unknown`` when no label is found."""
         return self.label_from_generated_text(value) or UNKNOWN_LABEL
 
     def label_from_generated_text(self, value: str) -> str | None:
+        """Extract one configured label from generated model text, if present."""
         text = value.strip().lower()
         if not text:
             return None
