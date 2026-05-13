@@ -17,9 +17,6 @@ from doc_classifier.io import read_jsonl
 from doc_classifier.labels import DEFAULT_LABEL_SPACE
 from doc_classifier.modeling import (
     classify_text,
-    classify_text_constrained,
-    classify_text_hybrid,
-    classify_text_strict,
     load_causal_lm,
     load_tokenizer,
     resolve_base_model,
@@ -40,18 +37,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=25,
         help="Print evaluation progress after this many records. Use 0 to disable.",
-    )
-    parser.add_argument(
-        "--label-batch-size",
-        type=int,
-        default=4,
-        help="Number of candidate labels scored in one forward pass. Lower this if GPU memory is tight.",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["constrained", "hybrid", "score", "generate"],
-        default="generate",
-        help="generate uses normal fine-tuned generation and parses only known labels.",
     )
     return parser.parse_args()
 
@@ -122,29 +107,7 @@ def main() -> None:
         if args.max_samples and index >= args.max_samples:
             break
         expected = DEFAULT_LABEL_SPACE.normalize(record["label"])
-        if args.mode == "constrained":
-            predicted, raw_answer = classify_text_constrained(record["text"], model, tokenizer)
-            score_payload = None
-        elif args.mode == "hybrid":
-            predicted, raw_answer, scores = classify_text_hybrid(
-                record["text"],
-                model,
-                tokenizer,
-                label_batch_size=args.label_batch_size,
-            )
-            score_payload = scores
-        elif args.mode == "score":
-            predicted, scores = classify_text_strict(
-                record["text"],
-                model,
-                tokenizer,
-                label_batch_size=args.label_batch_size,
-            )
-            raw_answer = predicted
-            score_payload = scores
-        else:
-            predicted, raw_answer = classify_text(record["text"], model, tokenizer)
-            score_payload = None
+        predicted, raw_answer = classify_text(record["text"], model, tokenizer)
         y_true.append(expected)
         y_pred.append(predicted)
         prediction_record = {
@@ -153,8 +116,6 @@ def main() -> None:
             "prediction": predicted,
             "raw_answer": raw_answer,
         }
-        if score_payload is not None:
-            prediction_record["label_scores"] = score_payload
         predictions.append(prediction_record)
         completed = index + 1
         if args.progress_every > 0 and completed % args.progress_every == 0:

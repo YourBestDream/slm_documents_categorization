@@ -229,13 +229,6 @@ Progress is printed every 25 evaluated records by default. Change it with:
 python scripts/evaluate.py --progress-every 10
 ```
 
-The optional scoring mode evaluates candidate labels in small batches. If GPU memory is
-tight, reduce the label batch size:
-
-```bash
-python scripts/evaluate.py --mode score --label-batch-size 1
-```
-
 ## Predict
 
 Classify raw text:
@@ -245,18 +238,10 @@ python scripts/predict.py --text "Invoice number 1024. Total due 594.00. Payment
 ```
 
 Prediction uses normal fine-tuned generation by default and parses only configured labels
-from the generated answer. If no configured label is found, `category` is `unknown`. To
-compare alternate decoding strategies, use `--mode constrained`, `--mode hybrid`, or
-`--mode score`.
+from the generated answer. If no configured label is found, `category` is `unknown`.
 
 ```bash
 python scripts/predict.py --text "Invoice number 1024. Total due 594.00."
-```
-
-To inspect score-mode label rankings:
-
-```bash
-python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --mode score --show-scores
 ```
 
 With Docker and Make:
@@ -363,7 +348,6 @@ python scripts/evaluate.py \
   --adapter-path /kaggle/input/datasets/scarletliar/results-of-training/kaggle/working/models/qwen3-doc-classifier \
   --test-file /kaggle/input/datasets/scarletliar/qwen3-doc-classifier/test.jsonl \
   --output-dir /kaggle/working/outputs-generation \
-  --mode generate \
   --progress-every 25
 ```
 
