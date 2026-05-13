@@ -271,6 +271,12 @@ Classify a file:
 python scripts/predict.py --file path\to\document.pdf
 ```
 
+If a real PDF/image gives an unexpected result, inspect the extracted OCR text:
+
+```bash
+python scripts/predict.py --file path\to\document.png --show-extracted-text
+```
+
 With Docker and Make:
 
 ```bash

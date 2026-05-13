@@ -96,6 +96,11 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.adapter_path and not args.adapter_path.exists():
+        raise FileNotFoundError(
+            f"Adapter path does not exist: {args.adapter_path}. "
+            "If you are on Kaggle, restore the trained adapter from an input dataset or rerun training."
+        )
     adapter = args.adapter_path if args.adapter_path.exists() else None
     base_model = resolve_base_model(args.adapter_path, args.model_name) if adapter else args.model_name
     tokenizer = load_tokenizer(str(adapter or base_model))

@@ -34,6 +34,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--show-scores", action="store_true")
     parser.add_argument(
+        "--show-extracted-text",
+        action="store_true",
+        help="Print the extracted/OCR text before prediction.",
+    )
+    parser.add_argument(
         "--label-batch-size",
         type=int,
         default=4,
@@ -48,6 +53,15 @@ def main() -> None:
         raise SystemExit("Provide --file or --text.")
 
     text = args.text if args.text is not None else extract_text(args.file)
+    if args.show_extracted_text:
+        print("extracted_text:")
+        print(text)
+        print("---")
+    if args.adapter_path and not args.adapter_path.exists():
+        raise FileNotFoundError(
+            f"Adapter path does not exist: {args.adapter_path}. "
+            "Restore the trained adapter or pass a valid --adapter-path."
+        )
     adapter = args.adapter_path if args.adapter_path.exists() else None
     base_model = resolve_base_model(args.adapter_path, args.model_name) if adapter else args.model_name
     tokenizer = load_tokenizer(str(adapter or base_model))
