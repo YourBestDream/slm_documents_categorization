@@ -53,6 +53,49 @@ def load_causal_lm(
 
 
 @torch.inference_mode()
+def classify_text_constrained(
+    text: str,
+    model,
+    tokenizer,
+    max_input_chars: int = 6000,
+    max_new_tokens: int = 8,
+) -> tuple[str, str]:
+    prompt = build_prompt(text, max_chars=max_input_chars)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(model.device)
+    prompt_length = inputs["input_ids"].shape[-1]
+    eos_token_id = tokenizer.eos_token_id
+
+    label_sequences = []
+    for label in DEFAULT_LABEL_SPACE.labels:
+        label_ids = tokenizer(f" {label}", add_special_tokens=False)["input_ids"]
+        label_sequences.append((label, label_ids + [eos_token_id]))
+
+    def allowed_tokens(_batch_id: int, input_ids: torch.Tensor) -> list[int]:
+        generated = input_ids[prompt_length:].tolist()
+        allowed: set[int] = set()
+        for _label, sequence in label_sequences:
+            if len(generated) < len(sequence) and sequence[: len(generated)] == generated:
+                allowed.add(sequence[len(generated)])
+        return list(allowed) if allowed else [eos_token_id]
+
+    output_ids = model.generate(
+        **inputs,
+        max_new_tokens=max_new_tokens,
+        do_sample=False,
+        pad_token_id=eos_token_id,
+        prefix_allowed_tokens_fn=allowed_tokens,
+    )
+    generated_ids = output_ids[0][prompt_length:]
+    raw_answer = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+    label = DEFAULT_LABEL_SPACE.label_from_generated_text(raw_answer)
+    if label is None:
+        label = DEFAULT_LABEL_SPACE.closest_from_text(raw_answer)
+    if label not in DEFAULT_LABEL_SPACE.labels:
+        raise RuntimeError(f"Constrained decoding produced an invalid label: {raw_answer!r}")
+    return label, raw_answer
+
+
+@torch.inference_mode()
 def score_labels(
     text: str,
     model,

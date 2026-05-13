@@ -15,6 +15,7 @@ from doc_classifier.io import read_jsonl
 from doc_classifier.labels import DEFAULT_LABEL_SPACE
 from doc_classifier.modeling import (
     classify_text,
+    classify_text_constrained,
     classify_text_hybrid,
     classify_text_strict,
     load_causal_lm,
@@ -45,9 +46,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["hybrid", "score", "generate"],
-        default="hybrid",
-        help="hybrid generates and falls back to scoring when needed. score always scores labels.",
+        choices=["constrained", "hybrid", "score", "generate"],
+        default="constrained",
+        help="constrained only allows label tokens during generation.",
     )
     return parser.parse_args()
 
@@ -109,7 +110,10 @@ def main() -> None:
         if args.max_samples and index >= args.max_samples:
             break
         expected = DEFAULT_LABEL_SPACE.normalize(record["label"])
-        if args.mode == "hybrid":
+        if args.mode == "constrained":
+            predicted, raw_answer = classify_text_constrained(record["text"], model, tokenizer)
+            score_payload = None
+        elif args.mode == "hybrid":
             predicted, raw_answer, scores = classify_text_hybrid(
                 record["text"],
                 model,

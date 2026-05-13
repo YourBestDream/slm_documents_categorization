@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from doc_classifier.extraction import extract_text
 from doc_classifier.modeling import (
     classify_text,
+    classify_text_constrained,
     classify_text_hybrid,
     classify_text_strict,
     load_causal_lm,
@@ -27,9 +28,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--load-in-4bit", action="store_true")
     parser.add_argument(
         "--mode",
-        choices=["hybrid", "score", "generate"],
-        default="hybrid",
-        help="hybrid generates and falls back to scoring when needed. score always scores labels.",
+        choices=["constrained", "hybrid", "score", "generate"],
+        default="constrained",
+        help="constrained only allows label tokens during generation.",
     )
     parser.add_argument("--show-scores", action="store_true")
     parser.add_argument(
@@ -51,7 +52,12 @@ def main() -> None:
     base_model = resolve_base_model(args.adapter_path, args.model_name) if adapter else args.model_name
     tokenizer = load_tokenizer(str(adapter or base_model))
     model = load_causal_lm(base_model, str(adapter) if adapter else None, load_in_4bit=args.load_in_4bit)
-    if args.mode == "hybrid":
+    if args.mode == "constrained":
+        label, raw_answer = classify_text_constrained(text, model, tokenizer)
+        print(f"category: {label}")
+        if args.show_scores:
+            print(json.dumps({"raw_answer": raw_answer, "mode": "constrained"}, indent=2))
+    elif args.mode == "hybrid":
         label, raw_answer, scores = classify_text_hybrid(
             text,
             model,

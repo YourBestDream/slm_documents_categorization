@@ -213,10 +213,9 @@ Evaluation writes:
 - `outputs/predictions.json`
 - `outputs/confusion_matrix.png`
 
-Evaluation uses hybrid label-only prediction by default. It first uses the fine-tuned
-generation behavior and accepts only configured labels; if generation does not contain a
-valid label, it falls back to label scoring. Use `--mode generate` only when comparing
-with raw free-text generation behavior.
+Evaluation uses constrained label generation by default. The model still generates, but
+the decoder is only allowed to emit one of the configured labels. Use `--mode generate`
+only when comparing with raw free-text generation behavior.
 
 For a quick smoke evaluation:
 
@@ -230,8 +229,8 @@ Progress is printed every 25 evaluated records by default. Change it with:
 python scripts/evaluate.py --progress-every 10
 ```
 
-The scoring fallback evaluates candidate labels in small batches. If GPU memory is tight,
-reduce the label batch size:
+The optional scoring mode evaluates candidate labels in small batches. If GPU memory is
+tight, reduce the label batch size:
 
 ```bash
 python scripts/evaluate.py --mode score --label-batch-size 1
@@ -245,8 +244,8 @@ Classify raw text:
 python scripts/predict.py --text "Invoice number 1024. Total due 594.00. Payment terms net 30."
 ```
 
-Prediction uses hybrid label-only mode by default, so `category` is always one of the
-configured labels. To inspect fallback scores when scoring is used:
+Prediction uses constrained label generation by default, so `category` is always one of
+the configured labels. To inspect the raw constrained answer:
 
 ```bash
 python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --show-scores
