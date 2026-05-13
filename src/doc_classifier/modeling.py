@@ -58,56 +58,70 @@ def score_labels(
     model,
     tokenizer,
     max_input_chars: int = 6000,
+    label_batch_size: int = 4,
 ) -> dict[str, float]:
     prompt = build_prompt(text, max_chars=max_input_chars)
     prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
     device = next(model.parameters()).device
-    input_rows = []
-    label_rows = []
-
-    for label in DEFAULT_LABEL_SPACE.labels:
-        label_ids = tokenizer(f" {label}{tokenizer.eos_token}", add_special_tokens=False)["input_ids"]
-        input_rows.append(prompt_ids + label_ids)
-        label_rows.append([-100] * len(prompt_ids) + label_ids)
-
     pad_token_id = tokenizer.pad_token_id or tokenizer.eos_token_id
-    max_length = max(len(row) for row in input_rows)
-    input_ids = torch.full(
-        (len(input_rows), max_length),
-        fill_value=pad_token_id,
-        dtype=torch.long,
-        device=device,
-    )
-    labels = torch.full(
-        (len(label_rows), max_length),
-        fill_value=-100,
-        dtype=torch.long,
-        device=device,
-    )
-    attention_mask = torch.zeros_like(input_ids, device=device)
+    scores: dict[str, float] = {}
+    label_batch_size = max(1, label_batch_size)
 
-    for row_index, (input_row, label_row) in enumerate(zip(input_rows, label_rows)):
-        row_length = len(input_row)
-        input_ids[row_index, :row_length] = torch.tensor(input_row, dtype=torch.long, device=device)
-        labels[row_index, :row_length] = torch.tensor(label_row, dtype=torch.long, device=device)
-        attention_mask[row_index, :row_length] = 1
+    labels_list = list(DEFAULT_LABEL_SPACE.labels)
+    for start in range(0, len(labels_list), label_batch_size):
+        batch_labels = labels_list[start : start + label_batch_size]
+        input_rows = []
+        label_rows = []
 
-    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-    logits = outputs.logits[:, :-1, :].float()
-    shifted_labels = labels[:, 1:]
-    loss_per_token = torch.nn.functional.cross_entropy(
-        logits.reshape(-1, logits.shape[-1]),
-        shifted_labels.reshape(-1),
-        ignore_index=-100,
-        reduction="none",
-    ).reshape(shifted_labels.shape)
-    token_counts = (shifted_labels != -100).sum(dim=1).clamp_min(1)
-    losses = loss_per_token.sum(dim=1) / token_counts
+        for label in batch_labels:
+            label_ids = tokenizer(f" {label}{tokenizer.eos_token}", add_special_tokens=False)[
+                "input_ids"
+            ]
+            input_rows.append(prompt_ids + label_ids)
+            label_rows.append([-100] * len(prompt_ids) + label_ids)
 
-    scores = {
-        label: float(loss.detach().cpu())
-        for label, loss in zip(DEFAULT_LABEL_SPACE.labels, losses)
-    }
+        max_length = max(len(row) for row in input_rows)
+        input_ids = torch.full(
+            (len(input_rows), max_length),
+            fill_value=pad_token_id,
+            dtype=torch.long,
+            device=device,
+        )
+        labels = torch.full(
+            (len(label_rows), max_length),
+            fill_value=-100,
+            dtype=torch.long,
+            device=device,
+        )
+        attention_mask = torch.zeros_like(input_ids, device=device)
+
+        for row_index, (input_row, label_row) in enumerate(zip(input_rows, label_rows)):
+            row_length = len(input_row)
+            input_ids[row_index, :row_length] = torch.tensor(
+                input_row, dtype=torch.long, device=device
+            )
+            labels[row_index, :row_length] = torch.tensor(label_row, dtype=torch.long, device=device)
+            attention_mask[row_index, :row_length] = 1
+
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        shifted_labels = labels[:, 1:]
+        label_token_mask = shifted_labels != -100
+        selected_logits = outputs.logits[:, :-1, :][label_token_mask].float()
+        selected_labels = shifted_labels[label_token_mask]
+        selected_losses = -torch.nn.functional.log_softmax(selected_logits, dim=-1).gather(
+            dim=-1,
+            index=selected_labels.unsqueeze(-1),
+        ).squeeze(-1)
+
+        row_indices = label_token_mask.nonzero(as_tuple=False)[:, 0]
+        loss_sums = torch.zeros(len(batch_labels), dtype=torch.float32, device=device)
+        token_counts = torch.zeros(len(batch_labels), dtype=torch.float32, device=device)
+        loss_sums.scatter_add_(0, row_indices, selected_losses)
+        token_counts.scatter_add_(0, row_indices, torch.ones_like(selected_losses))
+        losses = loss_sums / token_counts.clamp_min(1)
+
+        for label, loss in zip(batch_labels, losses):
+            scores[label] = float(loss.detach().cpu())
 
     return scores
 
@@ -118,8 +132,15 @@ def classify_text_by_score(
     model,
     tokenizer,
     max_input_chars: int = 6000,
+    label_batch_size: int = 4,
 ) -> tuple[str, dict[str, float]]:
-    scores = score_labels(text, model, tokenizer, max_input_chars=max_input_chars)
+    scores = score_labels(
+        text,
+        model,
+        tokenizer,
+        max_input_chars=max_input_chars,
+        label_batch_size=label_batch_size,
+    )
     label = min(scores, key=scores.get)
     return label, scores
 
@@ -151,12 +172,14 @@ def classify_text_strict(
     model,
     tokenizer,
     max_input_chars: int = 6000,
+    label_batch_size: int = 4,
 ) -> tuple[str, dict[str, float]]:
     label, scores = classify_text_by_score(
         text,
         model,
         tokenizer,
         max_input_chars=max_input_chars,
+        label_batch_size=label_batch_size,
     )
     if not math.isfinite(scores[label]):
         raise RuntimeError("Could not score labels; best label has a non-finite score.")

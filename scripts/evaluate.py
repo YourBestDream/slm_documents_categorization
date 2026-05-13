@@ -37,6 +37,12 @@ def parse_args() -> argparse.Namespace:
         help="Print evaluation progress after this many records. Use 0 to disable.",
     )
     parser.add_argument(
+        "--label-batch-size",
+        type=int,
+        default=4,
+        help="Number of candidate labels scored in one forward pass. Lower this if GPU memory is tight.",
+    )
+    parser.add_argument(
         "--mode",
         choices=["score", "generate"],
         default="score",
@@ -103,7 +109,12 @@ def main() -> None:
             break
         expected = DEFAULT_LABEL_SPACE.normalize(record["label"])
         if args.mode == "score":
-            predicted, scores = classify_text_strict(record["text"], model, tokenizer)
+            predicted, scores = classify_text_strict(
+                record["text"],
+                model,
+                tokenizer,
+                label_batch_size=args.label_batch_size,
+            )
             raw_answer = predicted
             score_payload = scores
         else:

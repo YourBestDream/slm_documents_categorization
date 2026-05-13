@@ -31,6 +31,12 @@ def parse_args() -> argparse.Namespace:
         help="score always returns one allowed label. generate is the legacy free-text mode.",
     )
     parser.add_argument("--show-scores", action="store_true")
+    parser.add_argument(
+        "--label-batch-size",
+        type=int,
+        default=4,
+        help="Number of candidate labels scored in one forward pass. Lower this if GPU memory is tight.",
+    )
     return parser.parse_args()
 
 
@@ -45,7 +51,12 @@ def main() -> None:
     tokenizer = load_tokenizer(str(adapter or base_model))
     model = load_causal_lm(base_model, str(adapter) if adapter else None, load_in_4bit=args.load_in_4bit)
     if args.mode == "score":
-        label, scores = classify_text_strict(text, model, tokenizer)
+        label, scores = classify_text_strict(
+            text,
+            model,
+            tokenizer,
+            label_batch_size=args.label_batch_size,
+        )
         print(f"category: {label}")
         if args.show_scores:
             print(json.dumps(dict(sorted(scores.items(), key=lambda item: item[1])), indent=2))

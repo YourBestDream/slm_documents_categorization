@@ -229,6 +229,13 @@ Progress is printed every 25 evaluated records by default. Change it with:
 python scripts/evaluate.py --progress-every 10
 ```
 
+Strict scoring evaluates candidate labels in small batches. If GPU memory is tight, reduce
+the label batch size:
+
+```bash
+python scripts/evaluate.py --mode score --label-batch-size 1
+```
+
 ## Predict
 
 Classify raw text:
