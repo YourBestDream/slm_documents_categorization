@@ -213,6 +213,10 @@ Evaluation writes:
 - `outputs/predictions.json`
 - `outputs/confusion_matrix.png`
 
+Evaluation uses strict label scoring by default, so predictions are always selected from
+the configured label list. Use `--mode generate` only when comparing with the original
+free-text generation behavior.
+
 For a quick smoke evaluation:
 
 ```bash
@@ -225,6 +229,19 @@ Classify raw text:
 
 ```bash
 python scripts/predict.py --text "Invoice number 1024. Total due 594.00. Payment terms net 30."
+```
+
+Prediction uses strict label scoring by default, so `category` is always one of the
+configured labels. To inspect scores:
+
+```bash
+python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --show-scores
+```
+
+The legacy free-text generation mode is still available for debugging:
+
+```bash
+python scripts/predict.py --text "Invoice number 1024. Total due 594.00." --mode generate
 ```
 
 With Docker and Make:
@@ -253,15 +270,53 @@ Supported file types:
 
 ## Results
 
-The implementation is ready to run, but fine-tuning was not executed in this repository
-setup because it requires downloading the model and dataset plus GPU time.
+Fine-tuning was run on Kaggle with `Qwen/Qwen3-1.7B`, 4-bit loading, and LoRA adapters.
+The experiment used OCR text from balanced RVL-CDIP samples:
 
-| Model | Dataset | Training Method | Samples | Accuracy | Macro F1 |
-|---|---|---|---:|---:|---:|
-| Qwen3-1.7B | RVL-CDIP OCR text | LoRA | Not run | Not run | Not run |
+- Train: 1,440 documents, 90 per class
+- Validation: 640 documents, 40 per class
+- Test: 640 documents, 40 per class
+- Epochs: 1
+- Training steps: 180
+- LoRA rank: 16
+- LoRA alpha: 32
+- LoRA dropout: 0.05
 
-After training and evaluation, replace the final columns with values from
-`outputs/metrics.json`.
+| Model | Dataset | Training Method | Train Samples | Test Samples | Accuracy | Macro F1 |
+|---|---|---|---:|---:|---:|---:|
+| Qwen3-1.7B | RVL-CDIP OCR text | QLoRA | 1,440 | 640 | 0.7063 | 0.7075 |
+
+Per-class F1 on the balanced test set:
+
+| Class | Precision | Recall | F1 |
+|---|---:|---:|---:|
+| resume | 0.975 | 0.975 | 0.975 |
+| email | 0.875 | 0.875 | 0.875 |
+| specification | 0.854 | 0.875 | 0.864 |
+| questionnaire | 0.892 | 0.825 | 0.857 |
+| scientific publication | 0.889 | 0.800 | 0.842 |
+| news article | 0.750 | 0.900 | 0.818 |
+| letter | 0.718 | 0.700 | 0.709 |
+| memo | 0.718 | 0.700 | 0.709 |
+| form | 0.733 | 0.550 | 0.629 |
+| invoice | 0.649 | 0.600 | 0.623 |
+| presentation | 0.710 | 0.550 | 0.620 |
+| scientific report | 0.800 | 0.500 | 0.615 |
+| file folder | 0.435 | 0.925 | 0.592 |
+| advertisement | 0.564 | 0.550 | 0.557 |
+| budget | 0.613 | 0.475 | 0.535 |
+| handwritten | 0.500 | 0.500 | 0.500 |
+
+The strongest classes were `resume`, `email`, `specification`, `questionnaire`, and
+`scientific publication`. The weakest classes were `handwritten`, `budget`,
+`advertisement`, and `file folder`. `file folder` had high recall but low precision,
+which means the model over-predicted that category.
+
+Evaluation artifacts from the run:
+
+- `outputs/metrics.json`
+- `outputs/predictions.json`
+- `outputs/confusion_matrix.png`
 
 ## CPU-Only Startup Path
 

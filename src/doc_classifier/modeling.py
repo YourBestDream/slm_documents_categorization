@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import torch
@@ -52,6 +53,41 @@ def load_causal_lm(
 
 
 @torch.inference_mode()
+def score_labels(
+    text: str,
+    model,
+    tokenizer,
+    max_input_chars: int = 6000,
+) -> dict[str, float]:
+    prompt = build_prompt(text, max_chars=max_input_chars)
+    prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
+    device = next(model.parameters()).device
+    scores: dict[str, float] = {}
+
+    for label in DEFAULT_LABEL_SPACE.labels:
+        label_ids = tokenizer(f" {label}{tokenizer.eos_token}", add_special_tokens=False)["input_ids"]
+        input_ids = torch.tensor([prompt_ids + label_ids], device=device)
+        labels = torch.tensor([[-100] * len(prompt_ids) + label_ids], device=device)
+        attention_mask = torch.ones_like(input_ids, device=device)
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        scores[label] = float(outputs.loss.detach().cpu())
+
+    return scores
+
+
+@torch.inference_mode()
+def classify_text_by_score(
+    text: str,
+    model,
+    tokenizer,
+    max_input_chars: int = 6000,
+) -> tuple[str, dict[str, float]]:
+    scores = score_labels(text, model, tokenizer, max_input_chars=max_input_chars)
+    label = min(scores, key=scores.get)
+    return label, scores
+
+
+@torch.inference_mode()
 def classify_text(
     text: str,
     model,
@@ -73,9 +109,25 @@ def classify_text(
     return label, raw_answer
 
 
+def classify_text_strict(
+    text: str,
+    model,
+    tokenizer,
+    max_input_chars: int = 6000,
+) -> tuple[str, dict[str, float]]:
+    label, scores = classify_text_by_score(
+        text,
+        model,
+        tokenizer,
+        max_input_chars=max_input_chars,
+    )
+    if not math.isfinite(scores[label]):
+        raise RuntimeError("Could not score labels; best label has a non-finite score.")
+    return label, scores
+
+
 def resolve_base_model(adapter_path: Path, fallback: str) -> str:
     config_path = adapter_path / "base_model_name.txt"
     if config_path.exists():
         return config_path.read_text(encoding="utf-8").strip()
     return fallback
-

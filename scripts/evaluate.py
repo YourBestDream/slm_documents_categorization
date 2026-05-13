@@ -12,7 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from doc_classifier.io import read_jsonl
 from doc_classifier.labels import DEFAULT_LABEL_SPACE
-from doc_classifier.modeling import classify_text, load_causal_lm, load_tokenizer, resolve_base_model
+from doc_classifier.modeling import (
+    classify_text,
+    classify_text_strict,
+    load_causal_lm,
+    load_tokenizer,
+    resolve_base_model,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,6 +29,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
     parser.add_argument("--max-samples", type=int, default=0, help="Use 0 for all examples.")
     parser.add_argument("--load-in-4bit", action="store_true")
+    parser.add_argument(
+        "--mode",
+        choices=["score", "generate"],
+        default="score",
+        help="score always chooses one allowed label. generate is the legacy free-text mode.",
+    )
     return parser.parse_args()
 
 
@@ -59,17 +71,24 @@ def main() -> None:
         if args.max_samples and index >= args.max_samples:
             break
         expected = DEFAULT_LABEL_SPACE.normalize(record["label"])
-        predicted, raw_answer = classify_text(record["text"], model, tokenizer)
+        if args.mode == "score":
+            predicted, scores = classify_text_strict(record["text"], model, tokenizer)
+            raw_answer = predicted
+            score_payload = scores
+        else:
+            predicted, raw_answer = classify_text(record["text"], model, tokenizer)
+            score_payload = None
         y_true.append(expected)
         y_pred.append(predicted)
-        predictions.append(
-            {
-                "id": record.get("id", str(index)),
-                "label": expected,
-                "prediction": predicted,
-                "raw_answer": raw_answer,
-            }
-        )
+        prediction_record = {
+            "id": record.get("id", str(index)),
+            "label": expected,
+            "prediction": predicted,
+            "raw_answer": raw_answer,
+        }
+        if score_payload is not None:
+            prediction_record["label_scores"] = score_payload
+        predictions.append(prediction_record)
 
     metrics = {
         "total": len(y_true),
@@ -102,4 +121,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

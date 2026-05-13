@@ -215,6 +215,8 @@ outputs/*
 !data/processed/.gitkeep
 !models/.gitkeep
 !outputs/.gitkeep
+qwen3-doc-classifier-results/
+qwen3-doc-classifier-results.zip
 
 # PyPI configuration file
 .pypirc
