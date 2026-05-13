@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from doc_classifier.extraction import extract_text
 from doc_classifier.modeling import (
     classify_text,
+    classify_text_hybrid,
     classify_text_strict,
     load_causal_lm,
     load_tokenizer,
@@ -26,9 +27,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--load-in-4bit", action="store_true")
     parser.add_argument(
         "--mode",
-        choices=["score", "generate"],
-        default="score",
-        help="score always returns one allowed label. generate is the legacy free-text mode.",
+        choices=["hybrid", "score", "generate"],
+        default="hybrid",
+        help="hybrid generates and falls back to scoring when needed. score always scores labels.",
     )
     parser.add_argument("--show-scores", action="store_true")
     parser.add_argument(
@@ -50,7 +51,19 @@ def main() -> None:
     base_model = resolve_base_model(args.adapter_path, args.model_name) if adapter else args.model_name
     tokenizer = load_tokenizer(str(adapter or base_model))
     model = load_causal_lm(base_model, str(adapter) if adapter else None, load_in_4bit=args.load_in_4bit)
-    if args.mode == "score":
+    if args.mode == "hybrid":
+        label, raw_answer, scores = classify_text_hybrid(
+            text,
+            model,
+            tokenizer,
+            label_batch_size=args.label_batch_size,
+        )
+        print(f"category: {label}")
+        if args.show_scores and scores is not None:
+            print(json.dumps(dict(sorted(scores.items(), key=lambda item: item[1])), indent=2))
+        elif args.show_scores:
+            print(json.dumps({"raw_answer": raw_answer, "fallback_scoring_used": False}, indent=2))
+    elif args.mode == "score":
         label, scores = classify_text_strict(
             text,
             model,

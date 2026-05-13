@@ -67,6 +67,25 @@ class LabelSpace:
         first_line = first_line.strip(" .,:;`'\"")
         return LABEL_ALIASES.get(first_line, first_line)
 
+    def label_from_generated_text(self, value: str) -> str | None:
+        text = value.strip().lower()
+        if not text:
+            return None
+
+        first_line = text.splitlines()[0].strip(" .,:;`'\"")
+        first_line = LABEL_ALIASES.get(first_line, first_line)
+        if first_line in self.labels:
+            return first_line
+
+        for label in self.labels:
+            if label == text or label in text:
+                return label
+
+        for alias, label in LABEL_ALIASES.items():
+            if alias in text:
+                return label
+
+        return None
+
 
 DEFAULT_LABEL_SPACE = LabelSpace()
-

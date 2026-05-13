@@ -163,8 +163,40 @@ def classify_text(
     )
     generated_ids = output_ids[0][inputs["input_ids"].shape[-1] :]
     raw_answer = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-    label = DEFAULT_LABEL_SPACE.closest_from_text(raw_answer)
+    label = DEFAULT_LABEL_SPACE.label_from_generated_text(raw_answer)
+    if label is None:
+        label = DEFAULT_LABEL_SPACE.closest_from_text(raw_answer)
     return label, raw_answer
+
+
+@torch.inference_mode()
+def classify_text_hybrid(
+    text: str,
+    model,
+    tokenizer,
+    max_input_chars: int = 6000,
+    max_new_tokens: int = 16,
+    label_batch_size: int = 1,
+) -> tuple[str, str, dict[str, float] | None]:
+    label, raw_answer = classify_text(
+        text,
+        model,
+        tokenizer,
+        max_input_chars=max_input_chars,
+        max_new_tokens=max_new_tokens,
+    )
+    parsed_label = DEFAULT_LABEL_SPACE.label_from_generated_text(raw_answer)
+    if parsed_label is not None:
+        return parsed_label, raw_answer, None
+
+    fallback_label, scores = classify_text_strict(
+        text,
+        model,
+        tokenizer,
+        max_input_chars=max_input_chars,
+        label_batch_size=label_batch_size,
+    )
+    return fallback_label, raw_answer, scores
 
 
 def classify_text_strict(
