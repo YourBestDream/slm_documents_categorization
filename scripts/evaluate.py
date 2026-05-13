@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -30,12 +31,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-samples", type=int, default=0, help="Use 0 for all examples.")
     parser.add_argument("--load-in-4bit", action="store_true")
     parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=25,
+        help="Print evaluation progress after this many records. Use 0 to disable.",
+    )
+    parser.add_argument(
         "--mode",
         choices=["score", "generate"],
         default="score",
         help="score always chooses one allowed label. generate is the legacy free-text mode.",
     )
     return parser.parse_args()
+
+
+def count_records(path: Path, max_samples: int = 0) -> int:
+    count = 0
+    with path.open("r", encoding="utf-8") as file:
+        for count, _ in enumerate(file, start=1):
+            if max_samples and count >= max_samples:
+                return count
+    return count
+
+
+def print_progress(completed: int, total: int, started_at: float) -> None:
+    elapsed = time.monotonic() - started_at
+    rate = completed / elapsed if elapsed > 0 else 0.0
+    remaining = (total - completed) / rate if rate > 0 else 0.0
+    percent = (completed / total) * 100 if total else 0.0
+    print(
+        f"[evaluate] {completed}/{total} ({percent:5.1f}%); "
+        f"{rate:.2f} docs/s; elapsed {elapsed / 60:.1f} min; "
+        f"eta {remaining / 60:.1f} min",
+        flush=True,
+    )
 
 
 def save_confusion_matrix(y_true: list[str], y_pred: list[str], output_path: Path) -> None:
@@ -67,6 +96,8 @@ def main() -> None:
     y_true: list[str] = []
     y_pred: list[str] = []
     predictions = []
+    total_records = count_records(args.test_file, args.max_samples)
+    started_at = time.monotonic()
     for index, record in enumerate(read_jsonl(args.test_file)):
         if args.max_samples and index >= args.max_samples:
             break
@@ -89,6 +120,12 @@ def main() -> None:
         if score_payload is not None:
             prediction_record["label_scores"] = score_payload
         predictions.append(prediction_record)
+        completed = index + 1
+        if args.progress_every > 0 and completed % args.progress_every == 0:
+            print_progress(completed, total_records, started_at)
+
+    if y_true:
+        print_progress(len(y_true), total_records, started_at)
 
     metrics = {
         "total": len(y_true),

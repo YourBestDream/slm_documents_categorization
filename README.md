@@ -223,6 +223,12 @@ For a quick smoke evaluation:
 python scripts/evaluate.py --max-samples 25
 ```
 
+Progress is printed every 25 evaluated records by default. Change it with:
+
+```bash
+python scripts/evaluate.py --progress-every 10
+```
+
 ## Predict
 
 Classify raw text:

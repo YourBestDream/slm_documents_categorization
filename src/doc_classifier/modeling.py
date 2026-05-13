@@ -62,15 +62,52 @@ def score_labels(
     prompt = build_prompt(text, max_chars=max_input_chars)
     prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
     device = next(model.parameters()).device
-    scores: dict[str, float] = {}
+    input_rows = []
+    label_rows = []
 
     for label in DEFAULT_LABEL_SPACE.labels:
         label_ids = tokenizer(f" {label}{tokenizer.eos_token}", add_special_tokens=False)["input_ids"]
-        input_ids = torch.tensor([prompt_ids + label_ids], device=device)
-        labels = torch.tensor([[-100] * len(prompt_ids) + label_ids], device=device)
-        attention_mask = torch.ones_like(input_ids, device=device)
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        scores[label] = float(outputs.loss.detach().cpu())
+        input_rows.append(prompt_ids + label_ids)
+        label_rows.append([-100] * len(prompt_ids) + label_ids)
+
+    pad_token_id = tokenizer.pad_token_id or tokenizer.eos_token_id
+    max_length = max(len(row) for row in input_rows)
+    input_ids = torch.full(
+        (len(input_rows), max_length),
+        fill_value=pad_token_id,
+        dtype=torch.long,
+        device=device,
+    )
+    labels = torch.full(
+        (len(label_rows), max_length),
+        fill_value=-100,
+        dtype=torch.long,
+        device=device,
+    )
+    attention_mask = torch.zeros_like(input_ids, device=device)
+
+    for row_index, (input_row, label_row) in enumerate(zip(input_rows, label_rows)):
+        row_length = len(input_row)
+        input_ids[row_index, :row_length] = torch.tensor(input_row, dtype=torch.long, device=device)
+        labels[row_index, :row_length] = torch.tensor(label_row, dtype=torch.long, device=device)
+        attention_mask[row_index, :row_length] = 1
+
+    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+    logits = outputs.logits[:, :-1, :].float()
+    shifted_labels = labels[:, 1:]
+    loss_per_token = torch.nn.functional.cross_entropy(
+        logits.reshape(-1, logits.shape[-1]),
+        shifted_labels.reshape(-1),
+        ignore_index=-100,
+        reduction="none",
+    ).reshape(shifted_labels.shape)
+    token_counts = (shifted_labels != -100).sum(dim=1).clamp_min(1)
+    losses = loss_per_token.sum(dim=1) / token_counts
+
+    scores = {
+        label: float(loss.detach().cpu())
+        for label, loss in zip(DEFAULT_LABEL_SPACE.labels, losses)
+    }
 
     return scores
 
